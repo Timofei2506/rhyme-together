@@ -15,12 +15,21 @@ export class GameSocket extends EventTarget {
     this.sessionId = localStorage.getItem('rt.sessionId') || null;
     // сервер на Cloudflare Workers открывает сокет на конкретную комнату:
     // /ws?code=123456. Node-сервер принимает любой /ws и ждёт create/join.
-    this.direct = Boolean(new URL(this.url).searchParams.has('code'));
+    // Режим «сокет на комнату»: сервер на Cloudflare Workers (или внешний сервер,
+    // отличный от того, с которого открыт фронтенд).
+    const u = new URL(this.url);
+    this.direct = Boolean(
+      u.searchParams.has('code') ||
+      u.host !== location.host ||
+      /workers\.dev$/.test(u.hostname)
+    );
     this._resumeCode = null;
     this.name = localStorage.getItem('rt.name') || '';
     this.code = null;
     this.attempt = 0;
+    this.dropCount = 0;      // сколько раз рвалось живое соединение
     this.connected = false;
+    this.serverReady = false;
     this.intentionalClose = false;
     this.queue = [];
     this.clock = { offset: 0, rtt: 0, samples: [], synced: false, quality: 0 };
@@ -31,6 +40,9 @@ export class GameSocket extends EventTarget {
 
   // ── подключение ────────────────────────────────────────────────────────────
   connect() {
+    // сервер на Workers открывает сокет только на конкретную комнату:
+    // без кода подключаться некуда (Node-сервер принимает любой /ws)
+    if (this.direct && !new URL(this.url).searchParams.get('code')) return;
     this.intentionalClose = false;
     if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) return;
     this._setStatus('connecting');
@@ -78,8 +90,10 @@ export class GameSocket extends EventTarget {
     };
 
     ws.onclose = () => {
+      if (this.connected) this.dropCount += 1;
       this.connected = false;
-      this._setStatus('disconnected');
+      if (this.direct && this.serverReady) this._emit('status', { status: 'connected', connected: true, socketClosed: true });
+      else this._setStatus('disconnected');
       this._stopPing();
       if (!this.intentionalClose) this._scheduleReconnect();
     };
@@ -190,6 +204,11 @@ export class GameSocket extends EventTarget {
   _emit(type, data) { this.dispatchEvent(new CustomEvent(type, { detail: data })); }
   _setStatus(status) {
     this.status = status;
-    this._emit('status', { status, connected: this.connected });
+    if (status === 'connected') this.serverReady = true;
+    if (status === 'disconnected') this.serverReady = false;
+    this._emit('status', { status, connected: this.ready });
   }
+
+  /** Сервер доступен и можно играть (в режиме Worker — ещё до открытия сокета) */
+  get ready() { return this.connected || this.serverReady === true; }
 }

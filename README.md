@@ -13,20 +13,48 @@
 [`docs/DEPLOY.md`](docs/DEPLOY.md) — деплой, `docs/screens/` — скриншоты всех экранов.
 
 
-## 🎮 Играть вдвоём прямо сейчас (без карты и регистрации)
+## 🎮 Играть вдвоём прямо сейчас
+
+**Адрес игры:** <https://rhyme-together.lestinger.workers.dev>
+**Фронтенд на Vercel:** <https://rhyme-together-web.vercel.app> (см. раздел «Vercel» — нужен один переключатель)
+
+Первый игрок открывает сайт → «Создать комнату» → получает шестизначный код →
+второй игрок вводит код на своём устройстве → оба жмут «Готов» → сервер выбирает
+песню и назначает партии A и B.
+
+## Архитектура деплоя
+
+| Часть | Где | Адрес |
+|---|---|---|
+| Игровой сервер (комнаты, WebSocket, синхронизация, итоги) | Cloudflare Workers + Durable Objects | `rhyme-together.lestinger.workers.dev` |
+| Фронтенд (SPA) | Vercel (и дублируется из Worker) | `rhyme-together-web.vercel.app` |
+| Статистика матчей | Durable Object `Lobby` (SQLite-хранилище) | — |
+| Резервный сервер | Node.js (`server/index.js`) — тот же протокол | любой хост с WebSocket |
+
+Одна комната = один Durable Object: он держит состояние, WebRTC-сигналинг и
+гарантирует единственный источник истины. Медиа через сервер не идёт.
+
+### Команды
 
 ```bash
-bash tools/serve.sh
+npm run deploy:cf      # выложить игровой сервер на Cloudflare (wrangler deploy)
+npm run serve          # локально: Node-сервер + HTTPS-туннель, без регистрации
+npm start              # локальный сервер на http://localhost:3000
+npm run test:e2e       # сквозной тест двух игроков (BASE=https://... для внешнего)
 ```
 
-Скрипт поднимает игровой сервер и HTTPS-туннель Cloudflare, затем печатает ссылку
-вида `https://xxxx.trycloudflare.com`. Её можно отправить второму игроку — голос
-пойдёт по WebRTC (P2P), события — по WebSocket через тот же адрес.
+### Vercel
 
-Требования: Android — Chrome, Windows — Chrome/Edge (микрофон доступен только по HTTPS).
+Проект `rhyme-together-web` уже связан с репозиторием и собирает статику из `src/`.
+Единственное, что нужно сделать руками в панели: **Settings → Deployment Protection →
+Vercel Authentication → Disabled**, иначе Vercel закрывает сайт своим логином
+(API этого переключателя не отдаёт). После этого `rhyme-together-web.vercel.app`
+открывается всем, а игровой сервер берётся с Cloudflare автоматически —
+адрес прописан в `src/index.html`.
 
-Если нужен постоянный адрес — `render.yaml` (Blueprint) или `deploy/Dockerfile` на любом
-хостинге с WebSocket; в панели хостинга задайте `TURN_URL/TURN_USERNAME/TURN_CREDENTIAL`.
+**Важно про доступность:** Cloudflare у вас открывается через VPN, поэтому
+если нужен адрес без VPN — откройте Vercel-версию: она использует тот же
+сервер, но снимает необходимость заходить на домен Cloudflare для страницы.
 
 ## Что уже работает (MVP)
 

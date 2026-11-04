@@ -1305,7 +1305,16 @@ async function boot() {
   bindUI();
   bindSocket();
   setConnStatus('connecting');
-  socket.connect();
+  // В режиме Cloudflare Workers сокет открывается только с кодом комнаты,
+  // поэтому при старте проверяем доступность сервера обычным запросом.
+  if (socket.direct) {
+    fetch(api('/api/health'))
+      .then((r) => r.json())
+      .then(() => socket._setStatus('connected'))
+      .catch(() => socket._setStatus('disconnected'));
+  } else {
+    socket.connect();
+  }
   requestAnimationFrame(meterLoop);
   await Promise.all([loadSongIndex(), loadStats()]);
   voice.setPeerVolume(S.settings.peerVol);

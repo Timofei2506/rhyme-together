@@ -5,6 +5,14 @@
   "compatibility_date": "2026-01-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+
+  // Frontend раздаётся и с Vercel, и отсюда — на случай, если на Vercel
+  // включена защита деплоя (Deployment Protection).
+  "assets": {
+    "directory": "./src",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
   "workers_dev": true,
 
   // Durable Objects: одна комната = один объект, лобби раздаёт коды

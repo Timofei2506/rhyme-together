@@ -103,7 +103,9 @@ async function makePlayer(browser, name, tone) {
   }
 
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.RT?.socket?.connected === true, { timeout: 15000 });
+  // на Cloudflare Workers сокет открывается только с кодом комнаты,
+  // поэтому готовность определяем по доступности сервера
+  await page.waitForFunction(() => window.RT?.socket?.ready === true, { timeout: 20000 });
   await page.evaluate((n) => {
     localStorage.setItem('rt.settings', JSON.stringify({ name: n }));
   }, name);
@@ -296,12 +298,17 @@ async function main() {
 
   // ── 9. потеря связи и переподключение ─────────────────────────────────────
   const codeBefore = await B.page.evaluate(() => window.RT.socket.code);
-  // сервер принудительно рвёт TCP-соединение (так выглядит реальный обрыв сети)
+  await sleep(400);
+  const dropsBefore = await B.page.evaluate(() => window.RT.socket.dropCount);
+  // сервер принудительно рвёт соединение (так выглядит реальный обрыв сети)
   await B.page.evaluate(() => window.RT.socket.send('debug-drop', {}));
-  const detected = await B.page.waitForFunction(() => window.RT.socket.connected === false, { timeout: 20000 })
-    .then(() => true).catch(() => false);
-  const offlineState = await B.page.evaluate(() => ({ connected: window.RT.socket.connected, status: window.RT.socket.status }));
-  ok('обрыв связи обнаружен клиентом', detected && !offlineState.connected, offlineState.status);
+  // клиент считает разрывы живого соединения: переподключение на Cloudflare
+  // происходит за ~0,7 с, поэтому «поймать» окно извне нереально — проверяем счётчик
+  const dropped = await B.page.waitForFunction(
+    (n) => window.RT.socket.dropCount > n, dropsBefore, { timeout: 25000 }
+  ).then(() => true).catch(() => false);
+  const dropsAfter = await B.page.evaluate(() => window.RT.socket.dropCount);
+  ok('обрыв связи обнаружен клиентом', dropped, `разрывов: ${dropsBefore} → ${dropsAfter}`);
   const reconnected = await B.page.waitForFunction(() => window.RT.socket.connected === true, { timeout: 25000 })
     .then(() => true).catch(() => false);
   ok('клиент переподключился автоматически', reconnected);
