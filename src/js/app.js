@@ -1106,13 +1106,27 @@ function bindUI() {
     const name = ($('#createName').value || '').trim() || 'Игрок 1';
     S.settings.name = name; saveSettings();
     socket.name = name;
-    if (!socket.connected) {
-      socket.connect();
-      await new Promise(r => setTimeout(r, 900));
-    }
-    if (!socket.connected) return toast('Нет связи с сервером. Проверьте интернет.', 'err', 5000);
     socket.sessionId = null;
     localStorage.removeItem('rt.sessionId');
+    // 1) просим у сервера свободный код комнаты (эндпоинт есть на обоих серверах)
+    let code = null;
+    try {
+      const r = await fetch(api('/api/newcode')).then((x) => x.json());
+      code = r?.code || null;
+    } catch { code = null; }
+
+    if (code) {
+      // 2) открываем сокет сразу на эту комнату
+      S.preferredSong = null;
+      socket.openRoom(code, name);
+      return;
+    }
+    // запасной путь (сервер не отдал код) — старый протокол create
+    if (!socket.connected) {
+      socket.connect();
+      await new Promise((r) => setTimeout(r, 900));
+    }
+    if (!socket.connected) return toast('Нет связи с сервером. Проверьте интернет.', 'err', 5000);
     socket.send('create', { name, preferredSong: S.preferredSong || null });
     S.preferredSong = null;
   };
@@ -1129,12 +1143,11 @@ function bindUI() {
     if (code.length !== 6) return toast('Код комнаты — 6 цифр', 'warn');
     S.settings.name = name; saveSettings();
     socket.name = name;
-    if (!socket.connected) { socket.connect(); await new Promise(r => setTimeout(r, 900)); }
-    if (!socket.connected) return toast('Нет связи с сервером', 'err');
     const check = await fetch(api(`/api/room/${code}`)).then(r => r.json()).catch(() => null);
     if (check && !check.exists) return toast(`Комната ${code} не найдена`, 'err');
     if (check && check.full) return toast('В комнате уже два игрока', 'err');
-    socket.send('join', { code, name, sessionId: null });
+    socket.sessionId = null;
+    socket.openRoom(code, name);
   };
 
   // комната: копирование кода

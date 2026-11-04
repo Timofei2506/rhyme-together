@@ -13,6 +13,10 @@ export class GameSocket extends EventTarget {
     this.ws = null;
     this.url = wsUrl || resolveEndpoints().wsUrl;
     this.sessionId = localStorage.getItem('rt.sessionId') || null;
+    // сервер на Cloudflare Workers открывает сокет на конкретную комнату:
+    // /ws?code=123456. Node-сервер принимает любой /ws и ждёт create/join.
+    this.direct = Boolean(new URL(this.url).searchParams.has('code'));
+    this._resumeCode = null;
     this.name = localStorage.getItem('rt.name') || '';
     this.code = null;
     this.attempt = 0;
@@ -28,6 +32,7 @@ export class GameSocket extends EventTarget {
   // ── подключение ────────────────────────────────────────────────────────────
   connect() {
     this.intentionalClose = false;
+    if (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)) return;
     this._setStatus('connecting');
     let ws;
     try {
@@ -45,8 +50,11 @@ export class GameSocket extends EventTarget {
       // синхронизация часов: 5 замеров, берём лучший
       this.syncClock(5);
       // восстановление сессии, если были в комнате
-      const resumeCode = sessionStorage.getItem('rt.resumeCode');
-      if (resumeCode) {
+      const resumeCode = this._resumeCode || sessionStorage.getItem('rt.resumeCode');
+      this._resumeCode = null;
+      if (this.direct) {
+        this.send('join', { code: this.code || resumeCode, sessionId: this.sessionId, name: this.name, resume: true });
+      } else if (resumeCode) {
         this.send('join', { code: resumeCode, sessionId: this.sessionId, name: this.name, resume: true });
       }
       while (this.queue.length) {
@@ -108,10 +116,27 @@ export class GameSocket extends EventTarget {
   send(type, data = {}) {
     const msg = { type, ...data };
     if (!this.connected) {
-      if (['create', 'join'].includes(type)) this.queue.push(msg);
+      if (['create', 'join', 'ready', 'leave'].includes(type)) this.queue.push(msg);
       return false;
     }
     return this._raw(msg);
+  }
+
+  /**
+   * Открывает сокет на конкретную комнату (сервер на Cloudflare Workers).
+   * Для Node-сервера эквивалентно обычному подключению + join.
+   */
+  openRoom(code, name) {
+    this.code = code;
+    this.name = name;
+    if (this.direct) {
+      const u = new URL(this.url);
+      u.searchParams.set('code', code);
+      this.url = u.toString();
+    }
+    if (this.connected) { this.send('join', { code, name, sessionId: this.sessionId }); return; }
+    this._resumeCode = code;
+    this.connect();
   }
 
   // ── часы ───────────────────────────────────────────────────────────────────

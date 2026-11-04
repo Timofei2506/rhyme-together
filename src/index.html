@@ -432,6 +432,12 @@
   <div id="overlays"></div>
 </div>
 
+<script>
+  // Игровой сервер (Cloudflare Workers). Фронтенд живёт на Vercel отдельно,
+  // поэтому адрес сервера задаётся здесь; переопределяется через ?ws= и настройки.
+  window.RT_WS_URL = window.RT_WS_URL || 'wss://rhyme-together.lestinger.workers.dev/ws';
+  window.RT_API_URL = window.RT_API_URL || 'https://rhyme-together.lestinger.workers.dev';
+</script>
 <script type="module" src="/js/app.js"></script>
 </body>
 </html>

@@ -167,6 +167,14 @@ app.get('/api/rtc-config', (req, res) => {
 app.get('/api/stats', async (req, res) => res.json(await store.stats()));
 app.get('/api/leaderboard', async (req, res) => res.json(await store.leaderboard(12)));
 
+// Выдача свободного кода комнаты до открытия сокета.
+// Нужна клиенту, чтобы подключиться сразу к нужной комнате (Cloudflare Workers).
+app.get('/api/newcode', (req, res) => {
+  let code = null;
+  try { code = makeCode(); } catch (e) { code = null; }
+  res.json({ code });
+});
+
 // Проверка кода комнаты перед подключением (чтобы UI сразу сказал «нет такой»)
 app.get('/api/room/:code', (req, res) => {
   const r = rooms.get(req.params.code);
