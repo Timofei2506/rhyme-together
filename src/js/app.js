@@ -46,6 +46,8 @@ function loadSettings() {
   const def = {
     peerVol: 1, inst: 0.9, own: 0.5, master: 1, micGain: 1,
     echo: true, noise: true, agc: true, autoSync: true, deviceId: '', name: '',
+    // караоке: сначала даём послушать трек, потом поём
+    listenFirst: true, listenPasses: 1,
   };
   try { return { ...def, ...JSON.parse(localStorage.getItem('rt.settings') || '{}') }; } catch { return def; }
 }
@@ -318,11 +320,19 @@ async function prepareAndPlay(msg) {
   renderSections(song);
   renderNoteChips(song.vocal[S.myPart], song);
 
-  // синтез стемов (может занять 0,5–2 c — начинаем сразу после назначения старта)
+  // ── источник звука ────────────────────────────────────────────────────────
+  // Если у песни есть загруженные стемы (поле audio), играем настоящие файлы.
+  // Иначе синтезируем из партитуры — это путь для встроенных демо-треков.
   await new Promise(r => setTimeout(r, 30));
-  const renderer = new StemRenderer(song, ctx.sampleRate);
-  const stems = renderer.renderAll();
-  if (token !== S.renderToken) return;
+  let stems;
+  if (song.audio && song.audio.instrumental) {
+    stems = await loadAudioStems(song, ctx, token);
+    if (token !== S.renderToken) return;
+  } else {
+    const renderer = new StemRenderer(song, ctx.sampleRate);
+    stems = renderer.renderAll();
+    if (token !== S.renderToken) return;
+  }
   S.stems = stems;
 
   const clock = new MusicClock(ctx, {
@@ -344,10 +354,144 @@ async function prepareAndPlay(msg) {
 
   S.myResultSubmitted = false;
   navigateToGame();
+  closeCountdown();
+
+  // ── Прослушивание перед пением ────────────────────────────────────────────
+  // Как в настоящем караоке: сначала трек можно послушать целиком один раз
+  // (или дважды — настройка в настройках), микрофон в это время не пишется,
+  // оценка не начисляется. Пение начинается после кнопки «Я готов петь».
+  if (S.settings.listenFirst !== false) {
+    await clubListenPhase(song, stems, token);
+    if (token !== S.renderToken) return;
+  }
+
   clock.start();
   startTickLoop();
   startAnalyzeLoop();
-  closeCountdown();
+}
+
+/**
+ * Фаза прослушивания: демонстрация трека без записи голоса.
+ * Показывает текст синхронно с музыкой, чтобы игрок выучил партию.
+ */
+async function clubListenPhase(song, stems, token) {
+  const ctx = voice._ctx;
+  const passes = Math.max(1, Math.min(2, Number(S.settings.listenPasses) || 1));
+  // источник демо: загруженные стемы или синтез — логика одна и та же
+  const buf = stems;
+
+  const banner = document.createElement('div');
+  banner.className = 'listen-banner';
+  banner.innerHTML = `
+    <div class="lb-head">
+      <span class="lb-tag">ПРОСЛУШИВАНИЕ</span>
+      <span class="lb-title">${escapeHtml(song.title)}</span>
+    </div>
+    <div class="lb-line" id="lbLine"></div>
+    <div class="lb-foot">
+      <span id="lbInfo">Микрофон не записывается · проход ${S.listenPass || 1} из ${passes}</span>
+      <button class="btn sm primary" id="btnSkipListen">Петь сейчас</button>
+    </div>`;
+  document.body.appendChild(banner);
+  const lineEl = banner.querySelector('#lbLine');
+  const infoEl = banner.querySelector('#lbInfo');
+
+  let skipped = false;
+  banner.querySelector('#btnSkipListen').onclick = () => { skipped = true; };
+
+  const total = song.durationSec;
+
+  for (let pass = 1; pass <= passes && !skipped && token === S.renderToken; pass++) {
+    S.listenPass = pass;
+    infoEl.textContent = `Микрофон не записывается · проход ${pass} из ${passes}`;
+    const startedAt = ctx.currentTime + 0.25;
+    const sources = [];
+    for (const [kind, data] of Object.entries(buf)) {
+      // на прослушивании звучат инструментал и обе вокальные партии — это демо трека
+      const src = ctx.createBufferSource();
+      src.buffer = data;
+      const g = ctx.createGain();
+      // на прослушивании слышен и инструментал, и обе партии — это демо трека
+      g.gain.value = kind === 'instrumental' ? S.settings.inst * 0.9 : 0.55;
+      src.connect(g).connect(ctx.destination);
+      src.start(startedAt);
+      sources.push(src);
+    }
+    await new Promise((resolve) => {
+      const timer = setInterval(() => {
+        const pos = ctx.currentTime - startedAt;
+        if (pos >= 0) {
+          const line = pickLineAt(song, pos);
+          if (line) {
+            lineEl.innerHTML = line.html;
+            lineEl.classList.toggle('done', pos > line.end);
+          }
+        }
+        const pct = Math.max(0, Math.min(1, pos / total));
+        banner.style.setProperty('--listen-progress', `${Math.round(pct * 100)}%`);
+        if (skipped || pos > total || token !== S.renderToken) {
+          clearInterval(timer);
+          sources.forEach((s) => { try { s.stop(); } catch {} });
+          resolve();
+        }
+      }, 120);
+      setTimeout(() => { clearInterval(timer); resolve(); }, (total + 1) * 1000);
+    });
+    if (skipped) break;
+  }
+
+  // третий проход не нужен: перед пением даём короткую паузу-обратный отсчёт
+  banner.remove();
+  S.listenPass = (S.listenPass || 0) + 1;
+}
+
+/** Строка партии, звучащая в момент pos — для показа синхронно с демо */
+function pickLineAt(song, pos) {
+  const beat = 60 / song.bpm;
+  for (const part of [S.myPart, S.peerPart]) {
+    const lines = song.vocal[part] || [];
+    for (const ln of lines) {
+      const st = (ln.bar * song.beatsPerBar + ln.beat) * beat;
+      const dur = ln.syllables.reduce((a, x) => a + x.d, 0) * beat;
+      if (pos >= st - 0.4 && pos <= st + dur + 0.2) {
+        const html = (part === S.myPart ? '' : '<span class="lb-part">партнёр</span> ') +
+          ln.syllables.map((sy) => (sy.w === 1 && sy !== ln.syllables[0] ? ' ' : '') + escapeHtml(sy.t)).join('');
+        return { html, end: pos > st + dur };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Загружает реальные аудиофайлы песни и декодирует их в AudioBuffer.
+ * Пути берутся из song.audio: {instrumental, guideA, guideB}.
+ * Файлы должны быть доступны по тем же правилам CORS, что и API.
+ */
+async function loadAudioStems(song, ctx, token) {
+  const out = {};
+  const jobs = [
+    ['instrumental', song.audio.instrumental],
+    ['A', song.audio.guideA],
+    ['B', song.audio.guideB],
+  ].filter(([, url]) => url);
+  await Promise.all(jobs.map(async ([key, url]) => {
+    const res = await fetch(api(resolveAsset(url)));
+    if (!res.ok) throw new Error(`не загрузился стем ${key}: ${res.status}`);
+    const buf = await res.arrayBuffer();
+    if (token !== S.renderToken) return;
+    out[key] = await ctx.decodeAudioData(buf);
+  }));
+  if (!out.instrumental) throw new Error('нет инструментала');
+  // если гайд-вокала нет — партия остаётся без подсказки, но играть можно
+  if (!out.A) out.A = ctx.createBuffer(1, Math.max(1, Math.round(out.instrumental.duration * ctx.sampleRate)), ctx.sampleRate);
+  if (!out.B) out.B = out.A;
+  return out;
+}
+
+function resolveAsset(url) {
+  if (/^https?:/.test(url)) return url;
+  return url.startsWith('/') ? url : '/' + url;
 }
 
 function startTickLoop() {
@@ -393,6 +537,12 @@ function startAnalyzeLoop() {
     const clamped = Math.max(0, Math.min(pos, S.song.durationSec));
     S.analyser.pushFrame(clamped, freq, rms);
     S.currentFreq = freq;
+    // интерфейс обновляем по таймеру: работает и в фоновой вкладке
+    if (S.screen === 'game' && pos >= 0 &&
+        (!S._uiAt || performance.now() - S._uiAt > 80)) {
+      S._uiAt = performance.now();
+      updateGameUI(pos, freq);
+    }
     if (S.forceFinish && !S.myResultSubmitted) return submitResult();
     // прогресс партнёру (редко, чтобы не забивать канал)
     if (!S._lastProgressAt || performance.now() - S._lastProgressAt > 700) {
@@ -405,11 +555,12 @@ function startAnalyzeLoop() {
     }
   }, 20);
 
-  // отрисовка
+  // rAF используется только для плавной отрисовки графика нот:
+  // в неактивной вкладке он замирает, поэтому текст обновляется таймером выше.
   const draw = () => {
     if (S.clock && S.screen === 'game') {
       const pos = S.clock.desiredPosition();
-      if (pos >= 0) updateGameUI(pos, S.currentFreq);
+      if (pos >= 0) drawPitchLane(pos);
     }
     S.rafId = requestAnimationFrame(draw);
   };
@@ -477,11 +628,14 @@ function renderLyricsLines(pos, activeIndex) {
   const container = $('#gameSylLine');
   const pick = [];
   if (activeIndex >= 0) {
-    const lineStart = (lines[activeIndex].bar * song.beatsPerBar + lines[activeIndex].beat) * beat;
-    if (activeIndex > 0 && pos < lineStart + 0.8) pick.push({ ln: lines[activeIndex - 1], prev: true });
+    // всегда видно и прошлую фразу: певцу нужен контекст, а не только мгновение
+    if (activeIndex > 0) pick.push({ ln: lines[activeIndex - 1], prev: true });
     pick.push({ ln: lines[activeIndex], active: true });
     if (lines[activeIndex + 1]) pick.push({ ln: lines[activeIndex + 1], next: true });
-  } else if (lines.length) pick.push({ ln: lines[0], next: true });
+  } else if (lines.length) {
+    pick.push({ ln: lines[0], next: true });
+    if (lines[1]) pick.push({ ln: lines[1], next: true });
+  }
   container.innerHTML = pick.map(({ ln, prev, next }) => {
     const start = (ln.bar * song.beatsPerBar + ln.beat) * beat;
     // слоги группируются в слова, чтобы слова не разрывались переносом
@@ -491,29 +645,39 @@ function renderLyricsLines(pos, activeIndex) {
       html += `<span class="syl${next ? ' soon' : prev ? ' past' : ''}" data-i="${i}">${escapeHtml(sy.t)}</span>`;
     });
     if (open) html += '</span>';
-    return `<div class="syl-line${prev ? ' prev-line' : ''}" data-start="${start}">${html}</div>`;
+    const cls = prev ? ' prev-line' : next ? ' next-line' : ' current-line';
+    return `<div class="syl-line${cls}" data-start="${start}">${html}</div>`;
   }).join('');
 }
 
 let lastLineStart = null;
+/**
+ * Подсветка по слогам. Важно: слоги лежат внутри обёрток .word, поэтому
+ * берём именно .syl (иначе индексы съезжают и строка не подсвечивается).
+ */
 function updateSyllableStates(pos) {
   const lineEls = $$('#gameSylLine .syl-line');
   const song = S.song, beat = 60 / song.bpm;
   lineEls.forEach((lineEl) => {
     const start = Number(lineEl.dataset.start);
-    // найдём строку в партитуре
     const ln = song.vocal[S.myPart].find(l => (l.bar * song.beatsPerBar + l.beat) * beat === start);
     if (!ln) return;
     let t = start;
-    [...lineEl.children].forEach((el, i) => {
+    let activeWord = null;
+    lineEl.querySelectorAll('.syl').forEach((el) => {
+      const i = Number(el.dataset.i);
       const sy = ln.syllables[i];
       if (!sy) return;
       const dur = sy.d * beat;
       const on = pos >= t && pos < t + dur;
       el.classList.toggle('active', on);
-      if (pos >= t + dur) el.classList.remove('soon');
+      el.classList.toggle('past', pos >= t + dur);
+      if (on) activeWord = el.parentElement;
       t += dur;
     });
+    // слово целиком подсвечивается мягко — так глаз успевает за текстом
+    lineEl.querySelectorAll('.word').forEach((w) => w.classList.remove('word-on'));
+    if (activeWord) activeWord.classList.add('word-on');
   });
 }
 
@@ -694,10 +858,19 @@ function renderPartnerLyrics() {
   const lines = song.vocal[S.peerPart] || [];
   const beat = 60 / song.bpm;
   const start = lines.length ? (lines[0].bar * song.beatsPerBar + lines[0].beat) * beat : 0;
-  $('#gamePartnerLyrics').innerHTML = lines.length
-    ? `<div class="syl-line" data-start="${start}">${lines[0].syllables.map((sy) =>
-        `<span class="syl soon${sy.w ? ' w' : ''}">${escapeHtml(sy.t)}</span>`).join('')}</div>`
-    : '<div class="syl-line"><span class="syl faint">—</span></div>';
+  if (!lines.length) {
+    $('#gamePartnerLyrics').innerHTML = '<div class="syl-line"><span class="syl faint">—</span></div>';
+    S.partnerRenderedLine = 0;
+    return;
+  }
+  let html = '', open = false;
+  lines[0].syllables.forEach((sy, i) => {
+    if (sy.w === 1) { if (open) html += '</span>'; html += '<span class="word">'; open = true; }
+    html += `<span class="syl soon" data-i="${i}">${escapeHtml(sy.t)}</span>`;
+  });
+  if (open) html += '</span>';
+  $('#gamePartnerLyrics').innerHTML =
+    `<div class="syl-line current-line" data-start="${start}">${html}</div>`;
   S.partnerRenderedLine = 0;
 }
 
@@ -721,12 +894,12 @@ function updatePartnerLyrics(pos) {
     if (!ln) return;
     const st = (ln.bar * song.beatsPerBar + ln.beat) * beat;
     let html = '', open = false;
-    ln.syllables.forEach((sy) => {
+    ln.syllables.forEach((sy, i) => {
       if (sy.w === 1) { if (open) html += '</span>'; html += '<span class="word">'; open = true; }
-      html += `<span class="syl soon">${escapeHtml(sy.t)}</span>`;
+      html += `<span class="syl soon" data-i="${i}">${escapeHtml(sy.t)}</span>`;
     });
     if (open) html += '</span>';
-    el.innerHTML = `<div class="syl-line" data-start="${st}">${html}</div>`;
+    el.innerHTML = `<div class="syl-line current-line" data-start="${st}">${html}</div>`;
   }
   const lineEl = el.querySelector('.syl-line');
   if (!lineEl) return;
@@ -734,8 +907,8 @@ function updatePartnerLyrics(pos) {
   const ln = lines.find(l => (l.bar * song.beatsPerBar + l.beat) * beat === st);
   if (!ln) return;
   let t = st;
-  [...lineEl.querySelectorAll('.syl')].forEach((sp, i) => {
-    const sy = ln.syllables[i];
+  lineEl.querySelectorAll('.syl').forEach((sp) => {
+    const sy = ln.syllables[Number(sp.dataset.i)];
     if (!sy) return;
     const on = pos >= t && pos < t + sy.d * beat;
     sp.classList.toggle('active', on);
@@ -1275,7 +1448,27 @@ function bindUI() {
   bindSet('#setOwn', '#setOwnVal', 'own', v => S.clock?.setVolumes({ ownGuide: v }));
   bindSet('#setMaster', '#setMasterVal', 'master', v => S.clock?.setVolumes({ master: v }));
   $('#optAutoSync').checked = S.settings.autoSync;
-  $('#optAutoSync').onchange = (e) => { S.settings.autoSync = e.target.checked; saveSettings(); };
+  $('#optAutoSync').onchange = (e) => { S.settings.autoSync = e.target.checked; saveSettings();
+
+  // караоке: прослушивание перед пением
+  const listenFirst = $('#optListenFirst');
+  const listenPasses = $('#setListenPasses');
+  if (listenFirst) {
+    listenFirst.checked = S.settings.listenFirst !== false;
+    listenFirst.onchange = () => { S.settings.listenFirst = listenFirst.checked; saveSettings(); };
+  }
+  if (listenPasses) {
+    const label = $('#setListenPassesVal');
+    const sync = () => {
+      const v = Number(listenPasses.value) || 1;
+      S.settings.listenPasses = v;
+      if (label) label.textContent = String(v);
+      saveSettings();
+    };
+    listenPasses.value = String(S.settings.listenPasses || 1);
+    if (label) label.textContent = String(S.settings.listenPasses || 1);
+    listenPasses.oninput = sync;
+  } };
   $('#btnResync').onclick = () => { socket.syncClock(7); toast('Пересинхронизация часов…', ''); };
   $('#btnDiagVoice').onclick = async () => {
     await enableMic();

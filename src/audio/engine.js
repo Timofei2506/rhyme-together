@@ -278,14 +278,34 @@ export class MusicClock {
     this.makeBuffers(cfg.stems);
   }
 
+  /**
+   * Приводит стемы к единому виду.
+   * Синтезированные стемы — массивы каналов [L, R]; загруженные файлы —
+   * готовые AudioBuffer. Поддерживаем оба варианта и моно-файлы.
+   */
   makeBuffers(stems) {
-    const mk = (pair) => {
-      const b = this.ctx.createBuffer(2, pair[0].length, this.ctx.sampleRate);
-      b.copyToChannel(pair[0], 0);
-      b.copyToChannel(pair[1], 1);
+    const mk = (data) => {
+      if (data && typeof data.getChannelData === 'function') {
+        if (data.numberOfChannels >= 2) return data;
+        // моно → стерео
+        const b = this.ctx.createBuffer(2, data.length, data.sampleRate);
+        b.copyToChannel(data.getChannelData(0), 0);
+        b.copyToChannel(data.getChannelData(0), 1);
+        return b;
+      }
+      const left = data && data[0] ? data[0] : null;
+      const right = data && data[1] ? data[1] : left;
+      const len = left ? left.length : Math.ceil((this.song.durationSec || 1) * this.ctx.sampleRate);
+      const b = this.ctx.createBuffer(2, len, this.ctx.sampleRate);
+      if (left) b.copyToChannel(left.subarray(0, len), 0);
+      if (right) b.copyToChannel(right.subarray(0, len), 1);
       return b;
     };
-    this.buffers = { instrumental: mk(stems.instrumental), A: mk(stems.A), B: mk(stems.B) };
+    this.buffers = {
+      instrumental: mk(stems.instrumental),
+      A: mk(stems.A),
+      B: mk(stems.B),
+    };
   }
 
   /** Позиция по часам сервера (сек от начала трека) */

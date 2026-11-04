@@ -13,6 +13,29 @@
 [`docs/DEPLOY.md`](docs/DEPLOY.md) — деплой, `docs/screens/` — скриншоты всех экранов.
 
 
+## Обновление сайта после правок в репозитории
+
+Коротко: **сам по себе пуш в GitHub не обновляет Cloudflare.** Есть три варианта.
+
+| Как | Что нужно | Статус |
+|---|---|---|
+| `npm run deploy:cf` вручную | токен Cloudflare в окружении | ✅ работает сейчас |
+| GitHub Actions по пушу в `main` | добавить секрет `CLOUDFLARE_API_TOKEN` в настройки репозитория | ✅ workflow готов: `.github/workflows/deploy-cf.yml` |
+| Cloudflare Workers Builds | включить в панели: Worker → Settings → Builds → подключить репозиторий | ⚙️ только через панель, API этого не даёт |
+
+Фронтенд на Vercel обновляется автоматически: проект связан с репозиторием
+`rhyme-together`, каждый пуш в `main` запускает новый деплой.
+
+## Добавить свою песню
+
+```bash
+python3 tools/karakoke.py моя_песня.mp3 моя_песня.txt my_song_id [--minus минус.mp3]
+python3 tools/build_song_index.py
+npm run deploy:cf
+```
+
+Подробно: [`docs/ADD-SONG.md`](docs/ADD-SONG.md), пример текста — `docs/example-lyrics.txt`.
+
 ## 🎮 Играть вдвоём прямо сейчас
 
 **Адрес игры:** <https://rhyme-together.lestinger.workers.dev>

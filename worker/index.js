@@ -56,14 +56,17 @@ const MIME = {
   css: 'text/css; charset=utf-8', json: 'application/json; charset=utf-8',
   svg: 'image/svg+xml', png: 'image/png', ico: 'image/x-icon',
   woff2: 'font/woff2', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+  m4a: 'audio/mp4', mp4: 'audio/mp4', mp3: 'audio/mpeg', ogg: 'audio/ogg',
+  opus: 'audio/opus', wav: 'audio/wav', flac: 'audio/flac', webm: 'audio/webm',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
 };
 
 async function serveStatic(request, env, pathname) {
   if (!env.ASSETS) return new Response('Not Found', { status: 404 });
-  let key = pathname === '/' ? '/index.html' : pathname;
+  const key = pathname === '/' ? '/index.html' : pathname;
   let res = await env.ASSETS.fetch(new Request(new URL(key, request.url), request));
-  if (res.status === 404 && !pathname.includes('.')) {
-    // SPA: любой неизвестный путь отдаёт index.html
+  // файл с расширением не найден — честный 404, а не «страница приложения»
+  if (res.status === 404 && !/\.[a-z0-9]{1,5}$/i.test(pathname)) {
     res = await env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
   }
   if (res.status === 404) return res;
@@ -190,7 +193,9 @@ export default {
       });
     }
 
-    // ── всё остальное — фронтенд ──────────────────────────────────────────
+    // ── всё остальное — статика (фронтенд, стемы, тексты песен) ────────────
+    //    env.ASSETS сам раздаёт файлы и отдаёт 404 на отсутствующие,
+    //    а not_found_handling отдаёт index.html только для путей без файла.
     if (request.method === 'GET' || request.method === 'HEAD') return serveStatic(request, env, path);
     return json({ error: 'NOT_FOUND' }, { status: 404, req: request, env });
   },

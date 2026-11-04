@@ -12,7 +12,10 @@
     ступень — номер ступени в ладу (0 = тоника, 7 = тоника октавой выше)
     длительность — в долях такта
 
-Все мелодии — общественное достояние (народные и trad.), аранжировка авторская.
+Лицензии:
+  • народные мелодии и баллады — Public Domain (аранжировка авторская);
+  • современные треки — оригинальные сочинения для этого проекта (CC BY 4.0):
+    мелодия и текст написаны здесь, чужие произведения не используются.
 """
 import json, os
 
@@ -28,13 +31,15 @@ def semi(degree, scale):
 
 class Song:
     def __init__(self, sid, title, artist, bpm, bpb, tonic, key, difficulty,
-                 form, chords, part_labels, mood, countdown_bars=2):
+                 form, chords, part_labels, mood, countdown_bars=2,
+                 license="Public Domain", genre="folk"):
         self.sid, self.title, self.artist = sid, title, artist
         self.bpm, self.bpb, self.tonic, self.key = bpm, bpb, tonic, key
         self.scale = MINOR if key == "minor" else MAJOR
         self.difficulty, self.form, self.chords = difficulty, form, chords
         self.part_labels, self.mood = part_labels, mood
         self.countdown_bars = countdown_bars
+        self.license, self.genre = license, genre
         self.lines = {"A": [], "B": []}
         self.errors = []
         self.total_bars = sum(b for (_, b, _) in form)
@@ -105,7 +110,7 @@ class Song:
             return bar * self.bpb * 60.0 / self.bpm
         return {
             "id": self.sid, "title": self.title, "artist": self.artist,
-            "license": "Public Domain", "mood": self.mood,
+            "license": self.license, "mood": self.mood, "genre": self.genre,
             "bpm": self.bpm, "beatsPerBar": self.bpb, "key": self.key,
             "tonic": self.tonic, "scale": self.scale, "difficulty": self.difficulty,
             "totalBars": self.total_bars, "countdownBars": self.countdown_bars,

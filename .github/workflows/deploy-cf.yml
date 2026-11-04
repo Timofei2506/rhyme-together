@@ -1,0 +1,36 @@
+# Авто-деплой игрового сервера на Cloudflare при пуше в main.
+# Нужен один секрет репозитория: CLOUDFLARE_API_TOKEN
+# (Settings → Secrets and variables → Actions → New repository secret).
+name: deploy-cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'worker/**'
+      - 'src/**'
+      - 'wrangler.jsonc'
+      - 'package.json'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Пересобрать индекс и модуль песен
+        run: |
+          python3 tools/build_song_index.py || true
+          node tools/build-songs-module.mjs
+
+      - name: Выложить на Cloudflare
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 7bce50d409ebbafeadd951ddee391142
+          command: deploy
