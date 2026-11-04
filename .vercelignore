@@ -1,0 +1,13 @@
+# игровой сервер деплоится отдельно (Cloudflare Workers), на Vercel — только фронтенд
+server/
+worker/
+tools/
+docs/
+deploy/
+node_modules/
+data/
+*.md
+wrangler.jsonc
+railway.json
+render.yaml
+package-lock.json

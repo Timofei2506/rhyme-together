@@ -25,7 +25,7 @@ bash tools/serve.sh
 
 Требования: Android — Chrome, Windows — Chrome/Edge (микрофон доступен только по HTTPS).
 
-Если нужен постоянный адрес — `render.yaml` (Blueprint) или `Dockerfile` на любом
+Если нужен постоянный адрес — `render.yaml` (Blueprint) или `deploy/Dockerfile` на любом
 хостинге с WebSocket; в панели хостинга задайте `TURN_URL/TURN_USERNAME/TURN_CREDENTIAL`.
 
 ## Что уже работает (MVP)
