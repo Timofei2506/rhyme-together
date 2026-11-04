@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07060d">
+<meta name="description" content="RHYME TOGETHER — сетевое кооперативное караоке на двоих: две вокальные партии, синхронное воспроизведение, голосовая связь и командный результат.">
+<title>RHYME TOGETHER — кооперативное караоке на двоих</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🎤</text></svg>">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <div class="conn-banner" id="connBanner">Нет связи с сервером — переподключаюсь…</div>
+
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span><span>RHYME</span><span>TOGETHER</span></div>
+    <div class="spacer"></div>
+    <div class="pill" id="pillClock" title="Синхронизация часов с сервером"><span data-icon="clock" data-icon-size="15"></span> <span id="clockTxt">—</span></div>
+    <div class="pill" id="pillMic" title="Микрофон"><span data-icon="mic" data-icon-size="15"></span> <span id="micStateTxt">выкл</span></div>
+    <div class="pill" id="pillConn"><span class="led"></span><span id="connTxt">подключение…</span></div>
+  </header>
+
+  <!-- ═══ 1. ГЛАВНОЕ МЕНЮ ═══ -->
+  <main class="screen active" id="screen-menu">
+    <div class="wrap">
+      <div class="hero">
+        <div class="hero-badge">кооператив · 2 игрока · интернет</div>
+        <h1>Спой <span class="grad">вместе</span>,<br>а не наперегонки</h1>
+        <p class="lead">Два голоса, две партии, одна песня. Комната по шестизначному коду,
+           голосовая связь и синхронный старт по серверному времени — с любого устройства,
+           из любого города.</p>
+        <div class="actions" style="margin-top:26px">
+          <button class="btn-primary btn-lg" id="btnGoCreate"><span data-icon="plus"></span> Создать комнату</button>
+          <button class="btn-cyan btn-lg" id="btnGoJoin"><span data-icon="keypad"></span> Войти по коду</button>
+          <button class="btn-lg btn-ghost" id="btnGoLibrary"><span data-icon="music"></span> Библиотека</button>
+        </div>
+      </div>
+
+      <div class="menu-grid">
+        <button class="menu-tile" data-nav="mic">
+          <div class="t-ico" data-icon="sliders" data-icon-size="26"></div>
+          <div><div class="t-title">Настройка микрофона</div>
+               <div class="t-sub">Устройство, уровень, чувствительность</div></div>
+        </button>
+        <button class="menu-tile" data-nav="settings">
+          <div class="t-ico" data-icon="gear" data-icon-size="26"></div>
+          <div><div class="t-title">Настройки</div>
+               <div class="t-sub">Голос, громкости, задержка, TURN</div></div>
+        </button>
+        <button class="menu-tile" data-nav="library">
+          <div class="t-ico" data-icon="book" data-icon-size="26"></div>
+          <div><div class="t-title">Музыкальная библиотека</div>
+               <div class="t-sub">Песни с двумя готовыми партиями</div></div>
+        </button>
+      </div>
+
+      <div class="stat-strip">
+        <div class="s"><small>Песен в библиотеке</small><b id="statSongs">—</b></div>
+        <div class="s"><small>Проведено дуэтов</small><b id="statMatches">—</b></div>
+        <div class="s"><small>Средний командный балл</small><b id="statAvg">—</b></div>
+        <div class="s"><small>Игроков</small><b id="statPlayers">—</b></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 2. СОЗДАНИЕ КОМНАТЫ ═══ -->
+  <main class="screen" id="screen-create">
+    <div class="wrap narrow">
+      <button class="btn-ghost btn-sm" data-nav="menu"><span data-icon="back" data-icon-size="15"></span> Назад</button>
+      <div class="card glow" style="margin-top:16px">
+        <h2>Создать комнату</h2>
+        <p>Вы станете <b>игроком 1</b> и получите вокальную партию <b>A</b>. Партнёр войдёт по коду и получит партию <b>B</b>.</p>
+        <label class="field"><span>Ваше имя</span>
+          <input type="text" id="createName" maxlength="24" placeholder="Например, Аня" autocomplete="nickname">
+        </label>
+        <button class="btn-primary btn-block btn-lg" id="btnCreateRoom">Создать комнату →</button>
+        <p class="faint" style="margin:14px 0 0;font-size:12.5px">
+          Комната живёт, пока в ней есть игроки. Код действует 30 минут после последней активности.</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 3. ВХОД ПО КОДУ ═══ -->
+  <main class="screen" id="screen-join">
+    <div class="wrap narrow">
+      <button class="btn-ghost btn-sm" data-nav="menu"><span data-icon="back" data-icon-size="15"></span> Назад</button>
+      <div class="card glow" style="margin-top:16px">
+        <h2>Войти по коду</h2>
+        <p>Введите шестизначный код, который прислал партнёр. Вы получите партию <b>B</b>.</p>
+        <label class="field"><span>Ваше имя</span>
+          <input type="text" id="joinName" maxlength="24" placeholder="Как вас зовут?" autocomplete="nickname">
+        </label>
+        <label class="field"><span>Код комнаты</span>
+          <input type="text" id="joinCode" class="code-input" inputmode="numeric" pattern="[0-9]*"
+                 maxlength="6" placeholder="000000" autocomplete="off">
+        </label>
+        <button class="btn-cyan btn-block btn-lg" id="btnJoinRoom">Войти в комнату →</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 4. КОМНАТА ОЖИДАНИЯ ═══ -->
+  <main class="screen" id="screen-room">
+    <div class="wrap">
+      <div class="row between" style="margin-bottom:16px">
+        <div class="row" style="gap:10px">
+          <span class="badge-part a" id="myPartBadge">ПАРТИЯ A</span>
+          <span class="pill" id="roomPhasePill"><span class="led"></span><span>ожидание</span></span>
+        </div>
+        <button class="btn-danger btn-sm" id="btnLeaveRoom"><span data-icon="close" data-icon-size="15"></span> Покинуть комнату</button>
+      </div>
+
+      <div class="card glow">
+        <div class="center" style="margin-bottom:18px">
+          <small style="letter-spacing:.16em;text-transform:uppercase">Код приглашения</small>
+          <div class="code-display" id="codeDisplay"><span class="d">·</span><span class="d">·</span><span class="d">·</span><span class="d">·</span><span class="d">·</span><span class="d">·</span></div>
+          <div class="actions" style="justify-content:center">
+            <button class="btn-sm" id="btnCopyCode"><span data-icon="copy" data-icon-size="15"></span> Скопировать код</button>
+            <button class="btn-sm" id="btnCopyLink"><span data-icon="link" data-icon-size="15"></span> Скопировать ссылку</button>
+            <button class="btn-sm" id="btnShareCode"><span data-icon="share" data-icon-size="15"></span> Поделиться</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="slots">
+          <div class="slot" id="slot0">
+            <div class="avatar">–</div>
+            <div class="name">Ожидание…</div>
+            <div class="role">партия A</div>
+          </div>
+          <div class="vs">♥&nbsp;ДУЭТ</div>
+          <div class="slot" id="slot1">
+            <div class="avatar">?</div>
+            <div class="name">Свободное место</div>
+            <div class="role">партия B</div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="grid two" style="align-items:center">
+          <div>
+            <h3 style="margin-bottom:4px">Голосовая связь</h3>
+            <p class="faint" style="font-size:13px;margin-bottom:10px" id="voiceHint">Разрешите доступ к микрофону, чтобы слышать друг друга во время песни.</p>
+            <div class="row">
+              <button class="btn-sm" id="btnRoomMic"><span data-icon="mic" data-icon-size="15"></span> Включить микрофон</button>
+              <button class="btn-sm btn-ghost" id="btnRoomMicSetup"><span data-icon="sliders" data-icon-size="15"></span> Настроить</button>
+            </div>
+            <div class="meter" style="margin-top:14px"><i id="roomMicMeter"></i></div>
+            <div class="row between" style="margin-top:8px">
+              <small>Ваш уровень</small><small class="mono" id="roomMicDb">— дБ</small>
+            </div>
+          </div>
+          <div>
+            <h3 style="margin-bottom:4px">Партнёр</h3>
+            <div class="row between" style="margin-top:10px">
+              <small>Связь</small><span class="pill" id="peerVoicePill"><span class="led"></span><span>нет</span></span>
+            </div>
+            <div class="meter thin" style="margin-top:10px"><i id="roomPeerMeter"></i></div>
+            <div class="row between" style="margin-top:8px">
+              <small>Уровень партнёра</small><small class="mono" id="peerVoiceDb">— дБ</small>
+            </div>
+            <label class="field" style="margin-top:16px;margin-bottom:0"><span>Громкость партнёра</span>
+              <input type="range" id="roomPeerVol" min="0" max="1.5" step="0.01" value="1">
+            </label>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="grid two" style="align-items:center" id="songPreview">
+          <div>
+            <small style="letter-spacing:.14em;text-transform:uppercase">Песня</small>
+            <h3 style="margin:6px 0 2px" id="roomSongTitle">Выберет сервер случайно</h3>
+            <p class="faint mono" style="font-size:12.5px;margin:0" id="roomSongMeta">—</p>
+          </div>
+          <div class="row" style="justify-content:flex-end">
+            <button class="btn-sm btn-ghost" id="btnRandomSong"><span data-icon="dice" data-icon-size="15"></span> Случайная песня</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions" style="margin-top:18px;justify-content:center">
+        <button class="btn-primary btn-lg" id="btnReady" style="min-width:260px">Я готов петь (A)</button>
+      </div>
+      <p class="center faint" style="margin-top:12px;font-size:13px" id="readyHint">
+        Оба игрока должны нажать «готов» — тогда сервер выберет песню и назначит момент старта.</p>
+    </div>
+  </main>
+
+  <!-- ═══ 5. НАСТРОЙКА МИКРОФОНА ═══ -->
+  <main class="screen" id="screen-mic">
+    <div class="wrap narrow">
+      <button class="btn-ghost btn-sm" data-nav="back"><span data-icon="back" data-icon-size="15"></span> Назад</button>
+      <div class="card glow" style="margin-top:16px">
+        <h2>Настройка микрофона</h2>
+        <p>Спойте «а-а-а»: стрелка должна доходить до жёлтой зоны и не упираться в красную.</p>
+
+        <label class="field"><span>Устройство ввода</span>
+          <select id="micDevice"><option value="">Устройство по умолчанию</option></select>
+        </label>
+
+        <div class="row between"><small>Уровень входа</small><small class="mono" id="micDbTxt">— дБ</small></div>
+        <div class="meter" style="margin:8px 0 4px"><i id="micMeter"></i></div>
+        <div class="row between"><small class="faint">тихо</small><small class="faint">норма</small><small class="faint">громко</small></div>
+
+        <div class="divider"></div>
+
+        <label class="field"><span>Усиление микрофона <b id="micGainVal" class="mono">1.0×</b></span>
+          <input type="range" id="micGain" min="0.2" max="2.5" step="0.05" value="1">
+        </label>
+
+        <label class="switch">
+          <input type="checkbox" id="optEcho" checked><span class="track"></span>
+          <span class="txt">Эхоподавление<small>убирает акустическую обратную связь из колонок</small></span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="optNoise" checked><span class="track"></span>
+          <span class="txt">Шумоподавление<small>для тихой комнаты и встроенных микрофонов</small></span>
+        </label>
+        <label class="switch">
+          <input type="checkbox" id="optAgc" checked><span class="track"></span>
+          <span class="txt">Автогромкость<small>выравнивает тихие и громкие места</small></span>
+        </label>
+
+        <div class="divider"></div>
+        <h3 style="font-size:15px">Проверка голосовой связи</h3>
+        <div class="row between" style="margin-top:8px">
+          <small>Партнёр</small>
+          <span class="pill" id="micPeerPill"><span class="led"></span><span>не в комнате</span></span>
+        </div>
+        <div class="meter thin" style="margin:10px 0 4px"><i id="micPeerMeter"></i></div>
+        <p class="faint" style="font-size:12.5px;margin-top:10px">
+          Соединение: <span id="iceTxt" class="mono">—</span> · канал: <span id="iceType" class="mono">—</span> ·
+          RTT <span id="iceRtt" class="mono">—</span> · битрейт <span id="iceBr" class="mono">—</span></p>
+        <div class="actions">
+          <button class="btn-cyan btn-sm" id="btnMicEnable"><span data-icon="mic" data-icon-size="15"></span> Включить микрофон</button>
+          <button class="btn-sm btn-ghost" id="btnMicMute"><span data-icon="micOff" data-icon-size="15"></span> Выключить</button>
+          <button class="btn-sm btn-ghost" id="btnMicRefresh"><span data-icon="refresh" data-icon-size="15"></span> Обновить устройства</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 6. ИГРОВОЙ ЭКРАН ═══ -->
+  <main class="screen" id="screen-game">
+    <div class="wrap">
+      <div class="game-head">
+        <span class="badge-part a" id="gamePartBadge">ПАРТИЯ A</span>
+        <div>
+          <h3 style="margin:0" id="gameSongTitle">—</h3>
+          <small class="faint mono" id="gameSongMeta">—</small>
+        </div>
+        <div class="spacer"></div>
+        <div class="pill" id="gameDriftPill" title="Рассинхронизация воспроизведения">Δ <span id="gameDrift">0</span> мс</div>
+        <div class="pill" id="gamePartnerPill"><span class="led"></span><span id="gamePartnerTxt">партнёр</span></div>
+      </div>
+
+      <div class="progress"><i id="gameProgress"></i></div>
+      <div class="sections" id="gameSections"></div>
+
+      <div class="game-grid">
+        <div class="card" style="padding:16px">
+          <div class="row between" style="margin-bottom:6px">
+            <small style="letter-spacing:.12em;text-transform:uppercase">Ваша партия</small>
+            <small class="mono" id="gameNoteNow">—</small>
+          </div>
+          <div class="lyrics" id="gameLyrics">
+            <div class="syl-line" id="gameSylLine"><span class="syl faint">Приготовьтесь…</span></div>
+          </div>
+          <div class="notes" id="gameNotes"></div>
+          <div style="margin-top:12px">
+            <canvas class="pitch-lane" id="pitchLane" height="92"></canvas>
+          </div>
+          <div class="coach" id="gameCoach" style="margin-top:10px">
+            <span data-icon="sparkle" data-icon-size="15"></span><span id="gameCoachTxt">Слушайте вступление и готовьтесь к вступлению</span>
+          </div>
+          <div class="hint-strip" style="margin-top:10px">
+            <span><span data-icon="mic" data-icon-size="14"></span> уровень: <b id="gameMicLevelTxt" class="mono">0%</b></span>
+            <span><span data-icon="target" data-icon-size="14"></span> точность: <b id="gameLiveAcc" class="mono">—</b></span>
+            <span><span data-icon="wifi" data-icon-size="14"></span> задержка: <b id="gameLatency" class="mono">—</b></span>
+          </div>
+          <div class="meter thin" style="margin-top:8px"><i id="gameMicMeter"></i></div>
+        </div>
+
+        <div class="col">
+          <div class="card" style="padding:16px">
+            <div class="row between" style="margin-bottom:8px">
+              <small style="letter-spacing:.12em;text-transform:uppercase">Партия партнёра</small>
+              <span class="badge-part b" id="gamePartnerPart">B</span>
+            </div>
+            <div class="lyrics compact" id="gamePartnerLyrics">
+              <div class="syl-line"><span class="syl faint">ждём партнёра…</span></div>
+            </div>
+            <div class="meter thin" style="margin-top:10px"><i id="gamePeerMeter"></i></div>
+            <div class="row between" style="margin-top:8px">
+              <small class="faint" id="gamePartnerStatus">—</small>
+              <small class="mono faint" id="gamePartnerProgress">0%</small>
+            </div>
+          </div>
+
+          <div class="card" style="padding:16px">
+            <small style="letter-spacing:.12em;text-transform:uppercase">Микс</small>
+            <label class="field" style="margin:12px 0 6px"><span>Инструментал <b id="volInstVal" class="mono">90%</b></span>
+              <input type="range" id="volInst" min="0" max="1" step="0.01" value="0.9"></label>
+            <label class="field" style="margin:0 0 6px"><span>Свой вспомогательный вокал <b id="volOwnVal" class="mono">50%</b></span>
+              <input type="range" id="volOwn" min="0" max="1" step="0.01" value="0.5"></label>
+            <label class="field" style="margin:0"><span>Вокал партнёра <b id="volAuxVal" class="mono">0%</b></span>
+              <input type="range" id="volAux" min="0" max="1" step="0.01" value="0"></label>
+            <div class="row" style="margin-top:10px">
+              <button class="btn-sm btn-ghost" id="btnGameMute"><span data-icon="micOff" data-icon-size="15"></span> Микрофон</button>
+              <button class="btn-sm btn-ghost" id="btnGameLeave"><span data-icon="close" data-icon-size="15"></span> Выйти</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 7. РЕЗУЛЬТАТЫ ═══ -->
+  <main class="screen" id="screen-results">
+    <div class="wrap">
+      <div class="card glow">
+        <div class="score-hero">
+          <small style="letter-spacing:.18em;text-transform:uppercase" id="resSubtitle">Командный результат</small>
+          <div class="total" id="resTotal">—</div>
+          <div class="of">из 100 · дуэт «<span id="resSong">—</span>»</div>
+          <p id="resVerdict" style="margin-top:14px"></p>
+        </div>
+
+        <div class="bars">
+          <div class="bar-row"><span>Ноты · 50%</span><div class="track"><i class="pc-team" id="barPitch" style="width:0"></i></div><span class="val" id="valPitch">—</span></div>
+          <div class="bar-row"><span>Ритм · 30%</span><div class="track"><i class="pc-team" id="barRhythm" style="width:0"></i></div><span class="val" id="valRhythm">—</span></div>
+          <div class="bar-row"><span>Синхронность · 20%</span><div class="track"><i class="pc-team" id="barSync" style="width:0"></i></div><span class="val" id="valSync">—</span></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="grid two" id="resPlayers"></div>
+
+        <div class="divider"></div>
+
+        <div class="grid two">
+          <div>
+            <h3 style="font-size:16px">Как это считалось</h3>
+            <ul class="list-plain" id="resTech"></ul>
+          </div>
+          <div>
+            <h3 style="font-size:16px">Топ дуэтов</h3>
+            <ul class="list-plain" id="resLeaderboard"><li><span class="faint">загрузка…</span></li></ul>
+          </div>
+        </div>
+
+        <div class="actions" style="margin-top:22px;justify-content:center">
+          <button class="btn-primary btn-lg" id="btnRematch"><span data-icon="refresh" data-icon-size="15"></span> Реванш</button>
+          <button class="btn-lg" id="btnResultsRoom"><span data-icon="back" data-icon-size="15"></span> В комнату</button>
+          <button class="btn-lg btn-ghost" id="btnResultsMenu"><span data-icon="home" data-icon-size="15"></span> В меню</button>
+        </div>
+        <p class="center faint" style="margin-top:12px;font-size:12.5px" id="rematchHint"></p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ═══ 8. БИБЛИОТЕКА ═══ -->
+  <main class="screen" id="screen-library">
+    <div class="wrap">
+      <div class="row between" style="margin-bottom:16px">
+        <div>
+          <h2 style="margin-bottom:2px">Музыкальная библиотека</h2>
+          <p class="faint" style="margin:0;font-size:13px">Только песни с подготовленной разметкой и двумя партиями. Мелодии — общественное достояние.</p>
+        </div>
+        <button class="btn-ghost btn-sm" data-nav="menu"><span data-icon="back" data-icon-size="15"></span> В меню</button>
+      </div>
+      <div class="grid three" id="libraryGrid"></div>
+      <div class="card" style="margin-top:20px" id="songDetail"></div>
+    </div>
+  </main>
+
+  <!-- ═══ 9. НАСТРОЙКИ ═══ -->
+  <main class="screen" id="screen-settings">
+    <div class="wrap narrow">
+      <button class="btn-ghost btn-sm" data-nav="menu"><span data-icon="back" data-icon-size="15"></span> В меню</button>
+      <div class="card glow" style="margin-top:16px">
+        <h2>Настройки</h2>
+
+        <h3 style="font-size:15px;margin-top:18px">Звук</h3>
+        <label class="field"><span>Громкость собеседника <b id="setPeerVolVal" class="mono">100%</b></span>
+          <input type="range" id="setPeerVol" min="0" max="1.5" step="0.01" value="1"></label>
+        <label class="field"><span>Инструментал <b id="setInstVal" class="mono">90%</b></span>
+          <input type="range" id="setInst" min="0" max="1" step="0.01" value="0.9"></label>
+        <label class="field"><span>Свой вспомогательный вокал <b id="setOwnVal" class="mono">50%</b></span>
+          <input type="range" id="setOwn" min="0" max="1" step="0.01" value="0.5"></label>
+        <label class="field"><span>Общий уровень <b id="setMasterVal" class="mono">100%</b></span>
+          <input type="range" id="setMaster" min="0" max="1" step="0.01" value="1"></label>
+
+        <div class="divider"></div>
+        <h3 style="font-size:15px">Синхронизация</h3>
+        <p class="faint" style="font-size:13px">Старт назначает сервер. Клиент измеряет смещение часов и подтягивает позицию.</p>
+        <ul class="list-plain">
+          <li><span>Смещение часов</span><b id="setOffset">—</b></li>
+          <li><span>Задержка до сервера (RTT)</span><b id="setRtt">—</b></li>
+          <li><span>Качество синхронизации</span><b id="setQuality">—</b></li>
+        </ul>
+        <label class="switch">
+          <input type="checkbox" id="optAutoSync" checked><span class="track"></span>
+          <span class="txt">Авто-коррекция рассинхронизации<small>скорость ±5 % и жёсткий seek при Δ &gt; 700 мс</small></span>
+        </label>
+        <button class="btn-sm btn-ghost" id="btnResync"><span data-icon="refresh" data-icon-size="15"></span> Пересинхронизировать часы</button>
+
+        <div class="divider"></div>
+        <h3 style="font-size:15px">Сеть и TURN</h3>
+        <p class="faint" style="font-size:13px" id="turnStatus">—</p>
+        <ul class="list-plain" id="iceServerList"></ul>
+
+        <div class="divider"></div>
+        <h3 style="font-size:15px">Диагностика</h3>
+        <ul class="list-plain" id="diagList"></ul>
+        <div class="actions" style="margin-top:14px">
+          <button class="btn-sm btn-ghost" id="btnDiagVoice"><span data-icon="headphones" data-icon-size="15"></span> Тест голосового канала</button>
+          <button class="btn-sm btn-ghost" id="btnResetSession"><span data-icon="close" data-icon-size="15"></span> Сбросить сессию</button>
+        </div>
+        <p class="faint" style="font-size:12px;margin-top:18px">
+          RHYME TOGETHER v1.0 · MVP · сервер Node.js + WebSocket, голос WebRTC, оценка на устройстве.</p>
+      </div>
+    </div>
+  </main>
+
+  <div id="toasts"></div>
+  <div id="overlays"></div>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

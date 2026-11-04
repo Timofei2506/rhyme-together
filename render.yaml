@@ -1,0 +1,27 @@
+# RHYME TOGETHER — Blueprint для Render (https://render.com/docs/blueprint-spec)
+services:
+  - type: web
+    name: rhyme-together
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm ci --omit=dev || npm install --omit=dev
+    startCommand: node server/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20.20.2"
+      - key: PORT
+        value: "3000"
+      - key: HOST
+        value: 0.0.0.0
+      - key: RHYME_TOGETHER_DEBUG
+        value: "1"
+      # TURN задаётся в панели Render (для голоса за строгим NAT)
+      - key: TURN_URL
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

@@ -1,0 +1,20 @@
+{
+  "name": "rhyme-together",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "RHYME TOGETHER — сетевое кооперативное караоке на двоих",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "songs": "python3 tools/gen-songs.py",
+    "test:e2e": "node tools/e2e.js",
+    "test:audio": "python3 tools/test-audio.py"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "express": "^4.21.2",
+    "pg": "^8.13.1",
+    "ws": "^8.18.0"
+  }
+}
