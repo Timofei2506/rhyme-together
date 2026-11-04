@@ -11,6 +11,22 @@
 **Документация:** [`docs/TZ-MAPPING.md`](docs/TZ-MAPPING.md) — построчное соответствие ТЗ,
 [`docs/DEPLOY.md`](docs/DEPLOY.md) — деплой, `docs/screens/` — скриншоты всех экранов.
 
+
+## 🎮 Играть вдвоём прямо сейчас (без карты и регистрации)
+
+```bash
+bash tools/serve.sh
+```
+
+Скрипт поднимает игровой сервер и HTTPS-туннель Cloudflare, затем печатает ссылку
+вида `https://xxxx.trycloudflare.com`. Её можно отправить второму игроку — голос
+пойдёт по WebRTC (P2P), события — по WebSocket через тот же адрес.
+
+Требования: Android — Chrome, Windows — Chrome/Edge (микрофон доступен только по HTTPS).
+
+Если нужен постоянный адрес — `render.yaml` (Blueprint) или `Dockerfile` на любом
+хостинге с WebSocket; в панели хостинга задайте `TURN_URL/TURN_USERNAME/TURN_CREDENTIAL`.
+
 ## Что уже работает (MVP)
 
 | Требование | Статус | Где смотреть |
